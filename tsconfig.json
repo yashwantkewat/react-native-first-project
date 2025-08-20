@@ -6,7 +6,7 @@
       "@/*": ["./*"]
     },
     "module": "esnext",        // ✅ This is best for React Native
-    // "moduleResolution": "node" // ✅ Required for Node-style imports
+    // "moduleResolution": "node" // ✅ Required for Nwode-style imports
   },
   "include": [
     "**/*.ts",
