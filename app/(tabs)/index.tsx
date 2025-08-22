@@ -1,59 +1,111 @@
-import { View, Button, StyleSheet, ScrollView } from 'react-native';
-import { Link, useRouter } from 'expo-router';
+import React, { useState, useEffect } from 'react';
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  ScrollView,
+  SafeAreaView,
+} from 'react-native';
+import { useRouter } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import ReviewsScreen from '../screens/getreview';
+import VegetablesScreen from '../screens/fooddata';
 
 export default function HomeScreen() {
   const router = useRouter();
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const checkUserLoggedIn = async () => {
+      try {
+        const userData = await AsyncStorage.getItem('user'); // yaha 'user' me tum login data store karte ho
+        if (!userData) {
+          router.replace('/screens/authuser/Login'); // agar user login nahi hai, redirect
+        } 
+        setIsLoading(false);
+      } catch (err) {
+        console.log(err);
+        setIsLoading(false);
+      }
+    };
+    checkUserLoggedIn();
+  }, []);
+
+  if (isLoading) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <Text>Loading...</Text>
+      </View>
+    );
+  }
 
   return (
-    <ScrollView>
+    <SafeAreaView style={styles.container}>
+      {/* Search Bar */}
+      <View style={styles.header}>
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search for products..."
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          placeholderTextColor="#999"
+        />
+      </View>
 
-  <View style={style.container}>
-  <Link href="/screens/home" style={style.list}>Go to home</Link>
-      <Link href="/screens/About" style={style.list}>Go to About</Link>
-      <Link href="/screens/Flexbox" style={style.list}>Go to flex box page</Link>
-      <Link href="/screens/Platformcode" style={style.list}>Go to  Plateformcode page</Link>
-      <Link href="/screens/authuser/signup" style={style.list}>Go to  signup page </Link>
-      <Link href="/screens/authuser/Login" style={style.list}>Go to  Login page </Link>
-      <Link href="/screens/authuser/forget-password" style={style.list}>Go to  forget-password page </Link>
-      <Link href="/screens/authuser/verify-otp" style={style.list}>Go to  verify otp page </Link>
-      <Link href="/screens/authuser/reset-password" style={style.list}>Go to  reset-password page </Link>
-      <Link href="/screens/authuser/profile" style={style.list}>Go to  update-profile page </Link>
-      <Link href="/screens/account" style={style.list}>Go to account</Link>
+      <ScrollView contentContainerStyle={{ paddingBottom: 100 }}>
+        {/* Quick Actions */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Quick Actions</Text>
+          <View style={styles.quickActionsContainer}>
+            <TouchableOpacity
+              style={styles.quickActionCard}
+              onPress={() => router.push('/screens/myorder')}
+            >
+              <Text style={styles.quickActionIcon}>📦</Text>
+              <Text style={styles.quickActionText}>My Orders</Text>
+            </TouchableOpacity>
 
-      <Link href="/screens/review" style={style.list}>Go to  review page </Link>
-      <Link href="/screens/getreview" style={style.list}>Get  review page </Link>
-      <Link href="/screens/categories" style={style.list}>categories page </Link>
-      <Link href="/screens/paymentmethod" style={style.list}>go to payment method </Link>
-      <Link href="/screens/data" style={style.list}>Go to  data page </Link>
-      <Link href="/screens/fooddata" style={style.list}>food data</Link>
-      <Link href="/screens/cart" style={style.list}>cart data</Link>
+            <TouchableOpacity
+              style={styles.quickActionCard}
+              onPress={() => router.push('/screens/useraddress')}
+            >
+              <Text style={styles.quickActionIcon}>📍</Text>
+              <Text style={styles.quickActionText}>Addresses</Text>
+            </TouchableOpacity>
 
-      <Link href="/screens/myorder" style={style.list}>Go to my order</Link>
-      <Link href="/screens/orderhistory" style={style.list}>Go to my order</Link>
+            <TouchableOpacity
+              style={styles.quickActionCard}
+              onPress={() => router.push('/screens/review')}
+            >
+              <Text style={styles.quickActionIcon}>⭐</Text>
+              <Text style={styles.quickActionText}>Reviews</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
 
-      <Link href="/welcomescreen/WelcomeScreen" style={style.list}>Go to  welcomeScreens page </Link>
-      <Link href="/screens/useraddress" style={style.list}>Go to  address page </Link>
+        <View style={styles.section}>
+          <VegetablesScreen />
+        </View>
 
-      <Button title="Go to scrollview" onPress={() => router.push('/screens/Scrollview')} />
-     
-    </View>
-    </ScrollView>
-  
+        <View style={styles.section}>
+          <ReviewsScreen />
+        </View>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
-const style = StyleSheet.create({
-  container: {
-    flexDirection: 'column',  // horizontal layout
-    justifyContent: 'center', // spacing
-    padding: 20,
-  },
-  list:{
-  
-    backgroundColor: 'skyblue',
-    alignItems: 'stretch',
-    justifyContent: 'center',
-    margin: 5,
-    padding:20
-  }
-})
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#f8f9fa' },
+  header: { paddingHorizontal: 20, paddingVertical: 15, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#eee' },
+  searchInput: { backgroundColor: '#f0f0f0', borderRadius: 10, paddingHorizontal: 15, height: 45, fontSize: 16, color: '#333' },
+  section: { paddingHorizontal: 20, marginBottom: 25 },
+  sectionTitle: { fontSize: 18, fontWeight: '600', color: '#333', marginBottom: 15 },
+  quickActionsContainer: { flexDirection: 'row', justifyContent: 'space-between' },
+  quickActionCard: { flex: 1, backgroundColor: '#fff', borderRadius: 12, padding: 15, alignItems: 'center', marginHorizontal: 5, elevation: 2 },
+  quickActionIcon: { fontSize: 24, marginBottom: 5 },
+  quickActionText: { fontSize: 12, fontWeight: '600', color: '#333', textAlign: 'center' },
+});

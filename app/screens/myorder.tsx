@@ -1,421 +1,365 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
   StyleSheet,
-  TouchableOpacity,
-  SafeAreaView,
-  ScrollView,
+  FlatList,
+  Image,
   ActivityIndicator,
-  StatusBar,
-} from 'react-native';
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import axiosInstance from "../../service/axiosInstance"; // 👈 apna path check kar lena
+  RefreshControl,
+  TouchableOpacity,
+  Dimensions,
+} from "react-native";
+import { Link } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
+import axiosInstance from "../../service/axiosInstance";
+import dayjs from "dayjs";
 
-// Types
-interface Order {
-  orderId: string;
-  date: string;
-  orderStatus: string;
+const { width } = Dimensions.get("window");
+const BOTTOM_BAR_HEIGHT = 100; // 👈 adjust according to your BottomBar height
+
+type OrderItem = {
+  image: string;
+  price: number;
   quantity: number;
-  tracking: string;
-}
+  productName: string, // ✅ product name add
 
-interface OrderStepProps {
-  title: string;
-  date: string;
-  isCompleted: boolean;
-  isActive: boolean;
-  isPending: boolean;
-}
+};
 
-const OrdersScreen: React.FC = () => {
+type Order = {
+  status: string;
+  expectedDelivery?: string;   // 👈 deliveryDate → expectedDelivery
+  items: OrderItem[];
+};
+
+
+type ApiResponse = {
+  orders: Order[];
+};
+
+const formatCurrency = (n: number) => {
+  try {
+    return new Intl.NumberFormat("en-IN", {
+      style: "currency",
+      currency: "INR",
+      maximumFractionDigits: 0,
+    }).format(n);
+  } catch {
+    return `₹${Math.round(n)}`;
+  }
+};
+
+const OrderHistoryMinimal: React.FC = () => {
   const [orders, setOrders] = useState<Order[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchOrders = useCallback(async () => {
+    setError(null);
+    try {
+      const res = await axiosInstance.get<ApiResponse>("/cart/order-history");
+      setOrders(res.data?.orders ?? []);
+    } catch (e: any) {
+      setError(e?.response?.data?.message || "Failed to load orders");
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
 
   useEffect(() => {
-    const fetchOrders = async () => {
-      try {
-        const userId = await AsyncStorage.getItem("userId"); // 👈 fetch from storage
-        if (!userId) {
-          console.log("❌ No userId found in storage");
-          return;
-        }
-  
-        const res = await axiosInstance.get<Order[]>(`/products/order/${userId}`);
-        setOrders(res.data);
-      } catch (err) {
-        console.log("Error fetching orders:", err);
-      } finally {
-        setLoading(false);
-      }
-    };
-  
     fetchOrders();
-  }, []);
-  
+  }, [fetchOrders]);
 
-  const getOrderSteps = (orderStatus: string) => {
-    const steps = [
-      { title: 'Order placed', date: 'Oct 19 2021', key: 'placed' },
-      { title: 'Order confirmed', date: 'Oct 20 2021', key: 'confirmed' },
-      { title: 'Order shipped', date: 'Oct 20 2021', key: 'shipped' },
-      { title: 'Out for delivery', date: 'pending', key: 'out_for_delivery' },
-      { title: 'Order delivered', date: 'pending', key: 'delivered' },
-    ];
-
-    const statusOrder = ['placed', 'confirmed', 'shipped', 'out_for_delivery', 'delivered'];
-    const currentIndex = statusOrder.indexOf(orderStatus);
-
-    return steps.map((step, index) => ({
-      ...step,
-      isCompleted: index <= currentIndex,
-      isActive: index === currentIndex,
-      isPending: index > currentIndex,
-    }));
-  };
-
-  const OrderStep: React.FC<OrderStepProps> = ({ 
-    title, 
-    date, 
-    isCompleted, 
-    isActive, 
-    isPending 
-  }) => (
-    <View style={styles.orderStep}>
-      <View style={styles.stepIndicator}>
-        <View style={[
-          styles.stepDot,
-          isCompleted && styles.completedDot,
-          isActive && styles.activeDot,
-          isPending && styles.pendingDot,
-        ]}>
-          {isCompleted && <Text style={styles.checkmark}>✓</Text>}
-        </View>
-        {title !== 'Order delivered' && (
-          <View style={[
-            styles.stepLine,
-            isCompleted && styles.completedLine,
-          ]} />
-        )}
-      </View>
-      <View style={styles.stepContent}>
-        <Text style={[
-          styles.stepTitle,
-          isCompleted && styles.completedText,
-          isActive && styles.activeText,
-          isPending && styles.pendingText,
-        ]}>
-          {title}
-        </Text>
-        <Text style={styles.stepDate}>{date}</Text>
-      </View>
-    </View>
-  );
-
-  const OrderCard: React.FC<{ order: Order; isExpanded?: boolean }> = ({ 
-    order, 
-    isExpanded = false 
-  }) => {
-    const steps = getOrderSteps(order.orderStatus);
-    
-    return (
-      <View style={styles.orderCard}>
-        <View style={styles.orderHeader}>
-          <View style={styles.orderIcon}>
-            <Text style={styles.packageIcon}>📦</Text>
-          </View>
-          <View style={styles.orderInfo}>
-            <Text style={styles.orderNumber}>Order {order.orderId}</Text>
-            <Text style={styles.orderDate}>
-              Placed on {new Date(order.date).toLocaleDateString('en-US', {
-                month: 'long',
-                day: 'numeric',
-                year: 'numeric'
-              })}
-            </Text>
-            <Text style={styles.orderDetails}>
-              Quantity: {order.quantity}
-            </Text>
-          </View>
-          <TouchableOpacity style={styles.moreButton}>
-            <Text style={styles.moreIcon}>⋯</Text>
-          </TouchableOpacity>
-        </View>
-
-        {isExpanded && (
-          <View style={styles.orderTracking}>
-            {steps.map((step, index) => (
-              <OrderStep
-                key={index}
-                title={step.title}
-                date={step.date}
-                isCompleted={step.isCompleted}
-                isActive={step.isActive}
-                isPending={step.isPending}
-              />
-            ))}
-          </View>
-        )}
-
-        {!isExpanded && order.orderStatus === 'delivered' && (
-          <View style={styles.deliveredStatus}>
-            <Text style={styles.deliveredText}>Order Delivered</Text>
-            <Text style={styles.deliveredDate}>
-              {new Date(order.date).toLocaleDateString('en-US')}
-            </Text>
-          </View>
-        )}
-      </View>
-    );
-  };
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    fetchOrders();
+  }, [fetchOrders]);
 
   if (loading) {
     return (
-      <View style={styles.loader}>
-        <ActivityIndicator size="large" color="#4CAF50" />
-        <Text style={styles.loadingText}>Loading Orders...</Text>
+      <View style={styles.center}>
+        <ActivityIndicator size="large" />
+        <Text style={styles.muted}>Loading your orders…</Text>
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={styles.center}>
+        <Text style={styles.errorText}>{error}</Text>
+        <TouchableOpacity style={styles.retryBtn} onPress={fetchOrders}>
+          <Text style={styles.retryText}>Retry</Text>
+        </TouchableOpacity>
       </View>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
-      
-      {/* Header */}
+    <View style={{ flex: 1 }}>
+      {/* ✅ Header */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton}>
-          <Text style={styles.backIcon}>←</Text>
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>My Order</Text>
-        <TouchableOpacity style={styles.filterButton}>
-          <Text style={styles.filterIcon}>≡</Text>
-        </TouchableOpacity>
+        <Link href="/" asChild>
+          <TouchableOpacity>
+            <Ionicons name="arrow-back" size={24} color="#111827" />
+          </TouchableOpacity>
+        </Link>
+        <Text style={styles.headerTitle}>MY ORDERS</Text>
+        <View style={{ width: 24 }} />
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {orders.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyText}>No orders found.</Text>
-          </View>
-        ) : (
-          orders.map((order, index) => (
-            <OrderCard 
-              key={`${order.orderId}-${index}`} 
-              order={order} 
-              isExpanded={index === 0} // Expand first order to show tracking
+      {orders.length === 0 ? (
+        <View style={[styles.center, { paddingBottom: BOTTOM_BAR_HEIGHT }]}>
+          <Text style={styles.emptyTitle}>No orders yet</Text>
+          <Text style={styles.muted}>You’ll see your past orders here.</Text>
+          <TouchableOpacity style={styles.shopBtn}>
+            <Text style={styles.shopText}>Start Shopping</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <FlatList
+          data={orders}
+          keyExtractor={(_, idx) => `order-${idx}`}
+          contentContainerStyle={[
+            styles.listContent,
+            { paddingBottom: BOTTOM_BAR_HEIGHT }, // 👈 extra space for BottomBar
+          ]}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          }
+          renderItem={({ item }) => <OrderCard order={item} />}
+        />
+      )}
+    </View>
+  );
+};
+
+const OrderCard: React.FC<{ order: Order }> = ({ order }) => {
+  const total = useMemo(
+    () =>
+      order.items.reduce(
+        (acc, it) => acc + (it.price || 0) * (it.quantity || 0),
+        0
+      ),
+    [order.items]
+  );
+
+  const normalizeImageUrl = (url: string) => {
+    if (!url) return "";
+    return url.replace("http://localhost:5000", "http://10.0.2.2:5000");
+  };
+
+
+  return (
+    <View style={styles.card}>
+      <View style={styles.cardHeader}>
+        <Text style={styles.cardTitle}>{order.status}</Text>
+        <Text style={styles.dateText}>
+          {order.expectedDelivery
+            ? `Expected Delivery: ${dayjs(order.expectedDelivery).format("DD MMM, YYYY")}`
+            : ""}
+        </Text>
+
+      </View>
+
+
+
+
+      <View style={styles.itemsWrap}>
+        {order.items.map((it, idx) => (
+          <View style={styles.itemRow} key={`${idx}-${it.image}`}>
+
+            <Image
+              source={{ uri: normalizeImageUrl(it.image) }}
+              style={styles.itemImage}
+              resizeMode="cover"
             />
-          ))
-        )}
-      </ScrollView>
-    </SafeAreaView>
+
+            <View style={styles.itemRight}>
+              <View style={styles.itemTopRow}>
+                <Text style={styles.qtyChip}>{it.productName}</Text>
+                <Text style={styles.qtyChip}>Qty: {it.quantity}</Text>
+                <Text style={styles.priceText}>{formatCurrency(it.price)}</Text>
+              </View>
+
+            </View>
+          </View>
+        ))}
+      </View>
+
+      <View style={styles.cardFooter}>
+        <View style={styles.totalWrap}>
+          <Text style={styles.totalLabel}>Order Total</Text>
+          <Text style={styles.totalValue}>{formatCurrency(total)}</Text>
+        </View>
+        <View style={styles.feedbackEmptyBadge}>
+          <Text style={styles.feedbackEmptyText}>Add feedback</Text>
+        </View>
+      </View>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F8F9FA',
-  },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
-  },
-  backButton: {
-    padding: 8,
-  },
-  backIcon: {
-    fontSize: 24,
-    color: '#333',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: width * 0.05,
+    paddingVertical: width * 0.04,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "#e5e7eb",
+    backgroundColor: "#fff",
   },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333',
+    fontSize: width * 0.045,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    color: "#111827",
   },
-  filterButton: {
-    padding: 8,
+
+  listContent: {
+    padding: width * 0.04,
   },
-  filterIcon: {
-    fontSize: 18,
-    color: '#333',
-  },
-  content: {
+  center: {
     flex: 1,
-    paddingHorizontal: 16,
-    paddingTop: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: width * 0.06,
   },
-  loader: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#F8F9FA',
+  muted: {
+    marginTop: 8,
+    color: "#6b7280",
+    fontSize: width * 0.035,
   },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: '#666',
+  errorText: {
+    color: "#ef4444",
+    fontSize: width * 0.04,
+    marginBottom: 12,
+    textAlign: "center",
   },
-  emptyState: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingTop: 100,
-  },
-  emptyText: {
-    fontSize: 16,
-    color: '#999',
-  },
-  orderCard: {
-    backgroundColor: '#FFFFFF',
+  retryBtn: {
+    paddingHorizontal: width * 0.04,
+    paddingVertical: width * 0.025,
     borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    backgroundColor: "#111827",
   },
-  orderHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
+  retryText: {
+    color: "#fff",
+    fontWeight: "600",
   },
-  orderIcon: {
-    width: 48,
-    height: 48,
-    backgroundColor: '#E8F5E8',
+  emptyTitle: {
+    fontSize: width * 0.05,
+    fontWeight: "700",
+    marginBottom: 6,
+  },
+  shopBtn: {
+    marginTop: 14,
+    paddingHorizontal: width * 0.04,
+    paddingVertical: width * 0.025,
     borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
+    backgroundColor: "#2563eb",
   },
-  packageIcon: {
-    fontSize: 24,
+  shopText: { color: "#fff", fontWeight: "600" },
+
+  card: {
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: width * 0.035,
+    marginBottom: width * 0.035,
+    shadowColor: "#000",
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+    width: "100%",
   },
-  orderInfo: {
+  cardHeader: {
+    marginBottom: 8,
+  },
+  cardTitle: {
+    fontSize: width * 0.04,
+    fontWeight: "700",
+    color: "#10b981",
+    marginBottom: 2,
+  },
+  dateText: {
+    color: "#6b7280",
+    fontSize: width * 0.033,
+  },
+  itemsWrap: {
+    marginTop: 6,
+  },
+  itemRow: {
+    flexDirection: "row",
+    paddingVertical: width * 0.025,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "#e5e7eb",
+  },
+  itemImage: {
+    width: width * 0.18,
+    height: width * 0.18,
+    borderRadius: 12,
+    backgroundColor: "#f3f4f6",
+  },
+  itemRight: {
     flex: 1,
+    marginLeft: width * 0.03,
+    justifyContent: "center",
   },
-  orderNumber: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 4,
+  itemTopRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "baseline",
   },
-  orderDate: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 4,
+  qtyChip: {
+    fontSize: width * 0.035,
+    fontWeight: "600",
+    paddingHorizontal: width * 0.025,
+    paddingVertical: width * 0.015,
+    borderRadius: 999,
+    backgroundColor: "#f1f5f9",
+    overflow: "hidden",
   },
-  orderDetails: {
-    fontSize: 14,
-    color: '#666',
+  priceText: {
+    fontSize: width * 0.04,
+    fontWeight: "700",
   },
-  moreButton: {
-    padding: 4,
-  },
-  moreIcon: {
-    fontSize: 20,
-    color: '#4CAF50',
-  },
-  orderTracking: {
-    marginTop: 20,
-    paddingTop: 20,
-    borderTopWidth: 1,
-    borderTopColor: '#F0F0F0',
-  },
-  orderStep: {
-    flexDirection: 'row',
-    marginBottom: 16,
-  },
-  stepIndicator: {
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  stepDot: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    borderWidth: 2,
-    borderColor: '#E0E0E0',
-    backgroundColor: '#FFFFFF',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  completedDot: {
-    backgroundColor: '#4CAF50',
-    borderColor: '#4CAF50',
-  },
-  activeDot: {
-    backgroundColor: '#4CAF50',
-    borderColor: '#4CAF50',
-  },
-  pendingDot: {
-    backgroundColor: '#F5F5F5',
-    borderColor: '#E0E0E0',
-  },
-  checkmark: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-  stepLine: {
-    width: 2,
-    height: 24,
-    backgroundColor: '#E0E0E0',
+  lineTotal: {
     marginTop: 4,
+    color: "#6b7280",
+    fontSize: width * 0.032,
   },
-  completedLine: {
-    backgroundColor: '#4CAF50',
+  cardFooter: {
+    marginTop: 10,
   },
-  stepContent: {
-    flex: 1,
-    paddingTop: 2,
+  totalWrap: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "baseline",
+    marginBottom: 8,
   },
-  stepTitle: {
-    fontSize: 14,
-    fontWeight: '500',
-    marginBottom: 2,
+  totalLabel: {
+    fontSize: width * 0.035,
+    color: "#374151",
   },
-  completedText: {
-    color: '#4CAF50',
+  totalValue: {
+    fontSize: width * 0.045,
+    fontWeight: "800",
   },
-  activeText: {
-    color: '#4CAF50',
+  feedbackEmptyBadge: {
+    borderRadius: 12,
+    padding: width * 0.025,
+    backgroundColor: "#f8fafc",
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
   },
-  pendingText: {
-    color: '#999',
-  },
-  stepDate: {
-    fontSize: 12,
-    color: '#999',
-  },
-  deliveredStatus: {
-    marginTop: 16,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#F0F0F0',
-  },
-  deliveredText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#4CAF50',
-    marginBottom: 2,
-  },
-  deliveredDate: {
-    fontSize: 12,
-    color: '#999',
+  feedbackEmptyText: {
+    fontSize: width * 0.033,
+    color: "#6b7280",
   },
 });
 
-export default OrdersScreen;
+export default OrderHistoryMinimal;

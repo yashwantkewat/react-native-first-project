@@ -11,6 +11,7 @@ import {
 import { AntDesign } from "@expo/vector-icons";
 import axiosInstance from "../../service/axiosInstance";
 import Toast from "react-native-toast-message"; // 👈 import
+import { useOrder } from "./context/OrderContext";
 
 interface Product {
   _id: string;
@@ -23,6 +24,7 @@ interface Product {
 const VegetablesScreen = () => {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const { setOrderCount, orderCount } = useOrder(); // 👈 context se state le lo
 
   useEffect(() => {
     const fetchProducts = async () => {
@@ -45,6 +47,8 @@ const VegetablesScreen = () => {
         productId,
         quantity: 1,
       });
+
+      setOrderCount(orderCount + 1);
 
       // ✅ Success toast
       Toast.show({
